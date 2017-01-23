@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# PiLFS Build Script SVN-20161203 v1.0
-# Builds chapters 5.4 - Binutils to 5.34 - Xz
-# http://www.intestinate.com/pilfs
+# This scripts builds the basic toolchain that is used in stage 2 
+# to build the actual file system
+# 
 #
 # Optional parameteres below:
 
@@ -14,46 +14,37 @@ STRIP_AND_DELETE_DOCS=1     # Strip binaries and delete manpages to save space a
 set -o nounset
 set -o errexit
 
+#Set the Target Variable
+export AIOS_TGT=aios-$(uname -m)
+
+
 function prebuild_sanity_check {
-    if [[ $(whoami) != "lfs" ]] ; then
-        echo "Not running as user lfs, you should be!"
-        exit 1
+
+
+    if ! [[ -v AIOS ]] ; then
+        echo "You forgot to set your LFS environment variable! Setting it now"
+        export AIOS=$(pwd)/../Build/aios
     fi
 
-    if ! [[ -v LFS ]] ; then
-        echo "You forgot to set your LFS environment variable!"
-        exit 1
-    fi
 
-    if ! [[ -v LFS_TGT ]] || [[ $LFS_TGT != "armv6l-lfs-linux-gnueabihf" && $LFS_TGT != "armv7l-lfs-linux-gnueabihf" ]] ; then
-        echo "Your LFS_TGT variable should be set to armv6l-lfs-linux-gnueabihf for RPi1 or armv7l-lfs-linux-gnueabihf for RPi2 and RPi3"
-        exit 1
-    fi
 
-    if ! [[ -d $LFS ]] ; then
+    if ! [[ -d $AIOS ]] ; then
         echo "Your LFS directory doesn't exist!"
         exit 1
     fi
 
-    if ! [[ -d $LFS/sources ]] ; then
+    if ! [[ -d $AIOS/sources ]] ; then
         echo "Can't find your sources directory!"
         exit 1
     fi
 
-    if [[ $(stat -c %U $LFS/sources) != "lfs" ]] ; then
-        echo "The sources directory should be owned by user lfs!"
-        exit 1
-    fi
 
-    if ! [[ -d $LFS/tools ]] ; then
+    if ! [[ -d $AIOS/tools ]] ; then
         echo "Can't find your tools directory!"
         exit 1
     fi
 
-    if [[ $(stat -c %U $LFS/tools) != "lfs" ]] ; then
-        echo "The tools directory should be owned by user lfs!"
-        exit 1
-    fi
+ 
 }
 
 function check_tarballs {
@@ -95,8 +86,8 @@ xz-5.2.2.tar.xz
 "
 
 for tarball in $LIST_OF_TARBALLS ; do
-    if ! [[ -f $LFS/sources/$tarball ]] ; then
-        echo "Can't find $LFS/sources/$tarball!"
+    if ! [[ -f $AIOS/sources/$tarball ]] ; then
+        echo "Can't find $AIOS/sources/$tarball!. Please recheck your packages"
         exit 1
     fi
 done
@@ -154,20 +145,20 @@ total_time=$(timer)
 sbu_time=$(timer)
 
 echo "# 5.4. Binutils-2.27 - Pass 1"
-cd $LFS/sources
+cd $AIOS/sources
 tar -jxf binutils-2.27.tar.bz2
 cd binutils-2.27
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
-             --with-sysroot=$LFS        \
+             --with-sysroot=$AIOS        \
              --with-lib-path=/tools/lib \
-             --target=$LFS_TGT          \
+             --target=$AIOS_TGT          \
              --disable-nls              \
              --disable-werror
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf binutils-2.27
 
 echo -e "\n=========================="
@@ -207,10 +198,10 @@ done
 mkdir -v build
 cd build
 ../configure                                       \
-    --target=$LFS_TGT                              \
+    --target=$AIOS_TGT                              \
     --prefix=/tools                                \
     --with-glibc-version=2.11                      \
-    --with-sysroot=$LFS                            \
+    --with-sysroot=$AIOS                            \
     --with-newlib                                  \
     --without-headers                              \
     --with-local-prefix=/tools                     \
@@ -230,7 +221,7 @@ cd build
     --enable-languages=c,c++
 make
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf gcc-6.2.0
 
 echo "# 5.6. Raspberry Pi Linux API Headers"
@@ -239,7 +230,7 @@ cd linux-rpi-4.4.y
 make mrproper
 make INSTALL_HDR_PATH=dest headers_install
 cp -rv dest/include/* /tools/include
-cd $LFS/sources
+cd $AIOS/sources
 
 echo "# 5.7. Glibc-2.24"
 tar -Jxf glibc-2.24.tar.xz
@@ -248,7 +239,7 @@ mkdir -v build
 cd build
 ../configure                             \
       --prefix=/tools                    \
-      --host=$LFS_TGT                    \
+      --host=$AIOS_TGT                    \
       --build=$(../scripts/config.guess) \
       --enable-kernel=2.6.32             \
       --with-headers=/tools/include      \
@@ -257,8 +248,8 @@ cd build
 make -j $PARALLEL_JOBS
 make install
 # Compatibility symlink for non ld-linux-armhf awareness
-ln -sv ld-2.24.so $LFS/tools/lib/ld-linux.so.3
-cd $LFS/sources
+ln -sv ld-2.24.so $AIOS/tools/lib/ld-linux.so.3
+cd $AIOS/sources
 rm -rf glibc-2.24
 
 echo "# 5.8. Libstdc++-6.2.0"
@@ -267,16 +258,16 @@ cd gcc-6.2.0
 mkdir -v build
 cd build
 ../libstdc++-v3/configure           \
-    --host=$LFS_TGT                 \
+    --host=$AIOS_TGT                 \
     --prefix=/tools                 \
     --disable-multilib              \
     --disable-nls                   \
     --disable-libstdcxx-threads     \
     --disable-libstdcxx-pch         \
-    --with-gxx-include-dir=/tools/$LFS_TGT/include/c++/6.2.0
+    --with-gxx-include-dir=/tools/$AIOS_TGT/include/c++/6.2.0
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf gcc-6.2.0
 
 echo "# 5.9. Binutils-2.27 - Pass 2"
@@ -284,9 +275,9 @@ tar -jxf binutils-2.27.tar.bz2
 cd binutils-2.27
 mkdir -v build
 cd build
-CC=$LFS_TGT-gcc                \
-AR=$LFS_TGT-ar                 \
-RANLIB=$LFS_TGT-ranlib         \
+CC=$AIOS_TGT-gcc                \
+AR=$AIOS_TGT-ar                 \
+RANLIB=$AIOS_TGT-ranlib         \
 ../configure                   \
     --prefix=/tools            \
     --disable-nls              \
@@ -298,7 +289,7 @@ make install
 make -C ld clean
 make -C ld LIB_PATH=/usr/lib:/lib
 cp -v ld/ld-new /tools/bin
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf binutils-2.27
 
 echo "# 5.10. gcc-6.2.0 - Pass 2"
@@ -313,7 +304,7 @@ case $(uname -m) in
   ;;
 esac
 cat gcc/limitx.h gcc/glimits.h gcc/limity.h > \
-  `dirname $($LFS_TGT-gcc -print-libgcc-file-name)`/include-fixed/limits.h
+  `dirname $($AIOS_TGT-gcc -print-libgcc-file-name)`/include-fixed/limits.h
 for file in \
  $(find gcc/config -name linux64.h -o -name linux.h -o -name sysv4.h -o -name linux-eabi.h -o -name linux-elf.h)
 do
@@ -335,10 +326,10 @@ tar -zxf ../mpc-1.0.3.tar.gz
 mv -v mpc-1.0.3 mpc
 mkdir -v build
 cd build
-CC=$LFS_TGT-gcc                                    \
-CXX=$LFS_TGT-g++                                   \
-AR=$LFS_TGT-ar                                     \
-RANLIB=$LFS_TGT-ranlib                             \
+CC=$AIOS_TGT-gcc                                    \
+CXX=$AIOS_TGT-g++                                   \
+AR=$AIOS_TGT-ar                                     \
+RANLIB=$AIOS_TGT-ranlib                             \
 ../configure                                       \
     --prefix=/tools                                \
     --with-local-prefix=/tools                     \
@@ -351,7 +342,7 @@ RANLIB=$LFS_TGT-ranlib                             \
 make
 make install
 ln -sv gcc /tools/bin/cc
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf gcc-6.2.0
 
 echo "# 5.11. Tcl-core-8.6.6"
@@ -364,7 +355,7 @@ make install
 chmod -v u+w /tools/lib/libtcl8.6.so
 make install-private-headers
 ln -sv tclsh8.6 /tools/bin/tclsh
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf tcl8.6.6
 
 echo "# 5.12. Expect-5.45"
@@ -377,7 +368,7 @@ sed 's:/usr/local/bin:/bin:' configure.orig > configure
             --with-tclinclude=/tools/include
 make -j $PARALLEL_JOBS
 make SCRIPTS="" install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf expect5.45
 
 echo "# 5.13. DejaGNU-1.6"
@@ -385,7 +376,7 @@ tar -zxf dejagnu-1.6.tar.gz
 cd dejagnu-1.6
 ./configure --prefix=/tools
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf dejagnu-1.6
 
 echo "# 5.14. Check-0.10.0"
@@ -394,7 +385,7 @@ cd check-0.10.0
 PKG_CONFIG= ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf check-0.10.0
 
 echo "# 5.15. Ncurses-6.0"
@@ -409,7 +400,7 @@ sed -i s/mawk// configure
             --enable-overwrite
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf ncurses-6.0
 
 echo "# 5.16. Bash-4.4"
@@ -419,7 +410,7 @@ cd bash-4.4
 make -j $PARALLEL_JOBS
 make install
 ln -sv bash /tools/bin/sh
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf bash-4.4
 
 echo "# 5.17. Bzip2-1.0.6"
@@ -427,7 +418,7 @@ tar -zxf bzip2-1.0.6.tar.gz
 cd bzip2-1.0.6
 make -j $PARALLEL_JOBS
 make PREFIX=/tools install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf bzip2-1.0.6
 
 echo "# 5.18. Coreutils-8.26"
@@ -436,7 +427,7 @@ cd coreutils-8.26
 ./configure --prefix=/tools --enable-install-program=hostname
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf coreutils-8.26
 
 echo "# 5.19. Diffutils-3.5"
@@ -445,7 +436,7 @@ cd diffutils-3.5
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf diffutils-3.5
 
 echo "# 5.20. File-5.29"
@@ -454,7 +445,7 @@ cd file-5.29
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf file-5.29
 
 echo "# 5.21. Findutils-4.6.0"
@@ -463,7 +454,7 @@ cd findutils-4.6.0
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf findutils-4.6.0
 
 echo "# 5.22. Gawk-4.1.4"
@@ -472,7 +463,7 @@ cd gawk-4.1.4
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf gawk-4.1.4
 
 echo "# 5.23. Gettext-0.19.8.1"
@@ -486,7 +477,7 @@ make -C src msgfmt
 make -C src msgmerge
 make -C src xgettext
 cp -v src/{msgfmt,msgmerge,xgettext} /tools/bin
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf gettext-0.19.8.1
 
 echo "# 5.24. Grep-2.26"
@@ -495,7 +486,7 @@ cd grep-2.26
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf grep-2.26
 
 echo "# 5.25. Gzip-1.8"
@@ -504,7 +495,7 @@ cd gzip-1.8
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf gzip-1.8
 
 echo "# 5.26. M4-1.4.17"
@@ -513,7 +504,7 @@ cd m4-1.4.17
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf m4-1.4.17
 
 echo "# 5.27. Make-4.2.1"
@@ -522,7 +513,7 @@ cd make-4.2.1
 ./configure --prefix=/tools --without-guile
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf make-4.2.1
 
 echo "# 5.28. Patch-2.7.5"
@@ -531,7 +522,7 @@ cd patch-2.7.5
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf patch-2.7.5
 
 echo "# 5.29. Perl-5.24.0"
@@ -542,7 +533,7 @@ make -j $PARALLEL_JOBS
 cp -v perl cpan/podlators/scripts/pod2man /tools/bin
 mkdir -pv /tools/lib/perl5/5.24.0
 cp -Rv lib/* /tools/lib/perl5/5.24.0
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf perl-5.24.0
 
 echo "# 5.30. Sed-4.2.2"
@@ -551,7 +542,7 @@ cd sed-4.2.2
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf sed-4.2.2
 
 echo "# 5.31. Tar-1.29"
@@ -560,7 +551,7 @@ cd tar-1.29
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf tar-1.29
 
 echo "# 5.32. Texinfo-6.3"
@@ -569,7 +560,7 @@ cd texinfo-6.3
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf texinfo-6.3
 
 echo "# 5.33. Util-linux-2.29"
@@ -582,7 +573,7 @@ cd util-linux-2.29
             PKG_CONFIG=""
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf util-linux-2.29
 
 echo "# 5.34. Xz-5.2.2"
@@ -591,7 +582,7 @@ cd xz-5.2.2
 ./configure --prefix=/tools
 make -j $PARALLEL_JOBS
 make install
-cd $LFS/sources
+cd $AIOS/sources
 rm -rf xz-5.2.2
 
 do_strip

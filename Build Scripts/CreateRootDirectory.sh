@@ -15,16 +15,23 @@ fi
 
 #The aios root folder. This will contain all toolchain and even te final builds
 cd aios
-export AIOS=$(pwd)
 
-AIOS_TGT=aios-$(uname -m)
+export AIOS=$(pwd)
+echo "AIOS env variable Set to $AIOS"
+export AIOS_TGT=aios-$(uname -m)
 
 #Create a symbolic link to the Packages folder so that we can use it to build the toolchain and root
-if [ ! -d "sources" ]; then
+if [ -d "sources" ]; then
 rm -rf sources
 fi
 
-ln -s $(pwd)/../../Packages sources
+ln -s $(pwd)/../../Packages ./sources
 
 #Modify the permissions 
 chmod -v a+wt $AIOS/sources
+
+#Create the tools directory
+if [ ! -d "tools" ]; then
+mkdir tools
+fi
+
