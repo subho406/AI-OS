@@ -1,5 +1,7 @@
-#The script downloads all the required packages one by one.
-#Downloaded packages are found in ../Packages
+#!/bin/bash
+#
+# The script downloads all the required packages one by one.
+# Downloaded packages are found in ../Packages
 
 
 
